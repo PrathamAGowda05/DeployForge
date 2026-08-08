@@ -1,23 +1,13 @@
 import type { Request, Response } from "express";
+import { pool } from "../db.js";
 
-export const getProjects = (req: Request, res: Response) => {
-  const projects = [
-    {
-      id: 1,
-      name: "portfolio",
-      status: "deployed",
-    },
-    {
-      id: 2,
-      name: "blog",
-      status: "building",
-    },
-  ];
+export const getProjects = async (req: Request, res: Response) => {
+  const result = await pool.query("SELECT * FROM projects");
 
-  res.json(projects);
+  res.json(result.rows);
 };
 
-export const createProject = (req: Request, res: Response) => {
+export const createProject = async (req: Request, res: Response) => {
   const { name } = req.body;
 
   if (!name || typeof name !== "string" || name.trim() === "") {
@@ -26,11 +16,10 @@ export const createProject = (req: Request, res: Response) => {
     });
   }
 
-  const project = {
-    id: 3,
-    name: name.trim(),
-    status: "created",
-  };
+  const result = await pool.query(
+    "INSERT INTO projects (name, status) VALUES ($1, $2) RETURNING *",
+    [name.trim(), "created"],
+  );
 
-  res.status(201).json(project);
+  res.status(201).json(result.rows[0]);
 };
