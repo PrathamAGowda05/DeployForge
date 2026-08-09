@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 
 export const register = async (req: Request, res: Response) => {
@@ -73,12 +74,24 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET!,
+      {
+        expiresIn: "1h",
+      },
+    );
+
     res.json({
       message: "Login successful",
       user: {
         id: user.id,
         email: user.email,
       },
+      token,
     });
   } catch (error) {
     console.error(error);
