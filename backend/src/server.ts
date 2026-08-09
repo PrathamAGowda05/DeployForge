@@ -1,5 +1,6 @@
 import express from "express";
 import projectRoutes from "./routes/projectRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 import "./db.js";
 
 const app = express();
@@ -14,6 +15,9 @@ app.get("/api/health", (req, res) => {
 
 // Project Routes
 app.use("/api/projects", projectRoutes);
+
+//Authentication Routes
+app.use("/api/auth", authRoutes);
 
 // Start Server
 app.listen(PORT, () => {
