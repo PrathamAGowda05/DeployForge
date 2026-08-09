@@ -2,26 +2,51 @@ import type { Request, Response } from "express";
 import { pool } from "../db.js";
 
 export const getProjects = async (req: Request, res: Response) => {
-  const result = await pool.query("SELECT * FROM projects");
+  try {
+    const userId = req.user!.userId;
 
-  res.json(result.rows);
+    const result = await pool.query(
+      "SELECT * FROM projects WHERE user_id = $1",
+      [userId],
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
 };
 
 export const createProject = async (req: Request, res: Response) => {
-  const { name } = req.body;
+  const { name, status } = req.body;
 
-  if (!name || typeof name !== "string" || name.trim() === "") {
+  if (!name || !status) {
     return res.status(400).json({
-      error: "Project name is required",
+      error: "Name and status are required",
     });
   }
 
-  const result = await pool.query(
-    "INSERT INTO projects (name, status) VALUES ($1, $2) RETURNING *",
-    [name.trim(), "created"],
-  );
+  try {
+    const userId = req.user!.userId;
 
-  res.status(201).json(result.rows[0]);
+    const result = await pool.query(
+      `INSERT INTO projects (name, status, user_id)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, status, user_id`,
+      [name, status, userId],
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
 };
 
 export const getProject = async (req: Request, res: Response) => {
