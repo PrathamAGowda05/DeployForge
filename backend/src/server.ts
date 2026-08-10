@@ -1,6 +1,7 @@
 import express from "express";
 import projectRoutes from "./routes/projectRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import deploymentRoutes from "./routes/deploymentRoutes.js";
 import "./db.js";
 
 const app = express();
@@ -18,6 +19,9 @@ app.use("/api/projects", projectRoutes);
 
 //Authentication Routes
 app.use("/api/auth", authRoutes);
+
+//Deployment Routes
+app.use("/projects/:id/deployments", deploymentRoutes);
 
 // Start Server
 app.listen(PORT, () => {
