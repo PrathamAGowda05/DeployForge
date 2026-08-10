@@ -19,8 +19,6 @@ export const allocatePort = async (deploymentId: number) => {
         return port;
       }
     } catch (error: any) {
-      // Unique constraint means another deployment
-      // already claimed this port.
       if (error.code === "23505") {
         continue;
       }
@@ -30,4 +28,13 @@ export const allocatePort = async (deploymentId: number) => {
   }
 
   throw new Error("No available deployment ports");
+};
+
+export const releasePort = async (deploymentId: number) => {
+  await pool.query(
+    `UPDATE deployments
+     SET host_port = NULL
+     WHERE id = $1`,
+    [deploymentId],
+  );
 };
