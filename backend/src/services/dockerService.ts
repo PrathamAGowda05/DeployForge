@@ -46,3 +46,15 @@ export const stopDockerContainer = async (containerId: string) => {
 export const startDockerContainer = async (containerId: string) => {
   await execAsync(`docker start ${containerId}`);
 };
+
+export const getDockerContainerStatus = async (containerId: string) => {
+  try {
+    const { stdout } = await execAsync(
+      `docker inspect -f "{{.State.Status}}" ${containerId}`,
+    );
+
+    return stdout.trim();
+  } catch (error) {
+    return null;
+  }
+};

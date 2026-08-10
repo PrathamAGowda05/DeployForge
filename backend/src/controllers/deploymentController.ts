@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { pool } from "../db.js";
 import { deployProject } from "../services/deploymentService.js";
 import {
+  getDockerContainerStatus,
   removeDockerContainer,
   removeDockerImage,
   startDockerContainer,
@@ -215,7 +216,38 @@ export const getDeployment = async (req: Request, res: Response) => {
       });
     }
 
-    res.json(result.rows[0]);
+    const deployment = result.rows[0];
+
+    // Synchronize status with Docker
+    if (deployment.container_id) {
+      const dockerStatus = await getDockerContainerStatus(
+        deployment.container_id,
+      );
+
+      let status = deployment.status;
+
+      if (dockerStatus === "running") {
+        status = "RUNNING";
+      } else if (dockerStatus === "exited") {
+        status = "STOPPED";
+      } else if (dockerStatus === null) {
+        status = "FAILED";
+      }
+
+      if (status !== deployment.status) {
+        const updatedDeployment = await pool.query(
+          `UPDATE deployments
+           SET status = $1
+           WHERE id = $2
+           RETURNING *`,
+          [status, deploymentId],
+        );
+
+        return res.json(updatedDeployment.rows[0]);
+      }
+    }
+
+    res.json(deployment);
   } catch (error) {
     console.error(error);
 
