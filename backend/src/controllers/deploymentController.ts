@@ -52,11 +52,19 @@ export const createDeployment = async (req: Request, res: Response) => {
       // 5. Deployment succeeded
       const updatedDeployment = await pool.query(
         `UPDATE deployments
-         SET status = $1,
-             logs = $2
-         WHERE id = $3
-         RETURNING *`,
-        ["SUCCESS", result.buildLogs, deployment.id],
+          SET status = $1,
+              logs = $2,
+              container_id = $3,
+              image_name = $4
+          WHERE id = $5
+          RETURNING *`,
+        [
+          "SUCCESS",
+          result.buildLogs,
+          result.containerId,
+          result.imageName,
+          deployment.id,
+        ],
       );
 
       return res.status(201).json({
