@@ -4,6 +4,8 @@ import { deployProject } from "../services/deploymentService.js";
 import {
   removeDockerContainer,
   removeDockerImage,
+  startDockerContainer,
+  stopDockerContainer,
 } from "../services/dockerService.js";
 
 export const createDeployment = async (req: Request, res: Response) => {
@@ -63,7 +65,7 @@ export const createDeployment = async (req: Request, res: Response) => {
           WHERE id = $5
           RETURNING *`,
         [
-          "SUCCESS",
+          "RUNNING",
           result.buildLogs,
           result.containerId,
           result.imageName,
@@ -219,6 +221,106 @@ export const getDeployment = async (req: Request, res: Response) => {
 
     res.status(500).json({
       error: "Internal server error",
+    });
+  }
+};
+
+export const stopDeployment = async (req: Request, res: Response) => {
+  const { id, deploymentId } = req.params;
+
+  try {
+    const userId = req.user!.userId;
+
+    const result = await pool.query(
+      `SELECT d.*
+       FROM deployments d
+       JOIN projects p ON d.project_id = p.id
+       WHERE d.id = $1
+         AND d.project_id = $2
+         AND p.user_id = $3`,
+      [deploymentId, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Deployment not found",
+      });
+    }
+
+    const deployment = result.rows[0];
+
+    if (deployment.status !== "RUNNING") {
+      return res.status(400).json({
+        error: "Deployment is not running",
+      });
+    }
+
+    await stopDockerContainer(deployment.container_id);
+
+    const updatedDeployment = await pool.query(
+      `UPDATE deployments
+       SET status = $1
+       WHERE id = $2
+       RETURNING *`,
+      ["STOPPED", deploymentId],
+    );
+
+    return res.json(updatedDeployment.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Failed to stop deployment",
+    });
+  }
+};
+
+export const startDeployment = async (req: Request, res: Response) => {
+  const { id, deploymentId } = req.params;
+
+  try {
+    const userId = req.user!.userId;
+
+    const result = await pool.query(
+      `SELECT d.*
+       FROM deployments d
+       JOIN projects p ON d.project_id = p.id
+       WHERE d.id = $1
+         AND d.project_id = $2
+         AND p.user_id = $3`,
+      [deploymentId, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Deployment not found",
+      });
+    }
+
+    const deployment = result.rows[0];
+
+    if (deployment.status !== "STOPPED") {
+      return res.status(400).json({
+        error: "Deployment is not stopped",
+      });
+    }
+
+    await startDockerContainer(deployment.container_id);
+
+    const updatedDeployment = await pool.query(
+      `UPDATE deployments
+       SET status = $1
+       WHERE id = $2
+       RETURNING *`,
+      ["RUNNING", deploymentId],
+    );
+
+    return res.json(updatedDeployment.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Failed to start deployment",
     });
   }
 };

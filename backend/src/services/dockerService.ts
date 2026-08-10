@@ -38,3 +38,11 @@ export const removeDockerContainer = async (containerId: string) => {
 export const removeDockerImage = async (imageName: string) => {
   await execAsync(`docker rmi ${imageName}`);
 };
+
+export const stopDockerContainer = async (containerId: string) => {
+  await execAsync(`docker stop ${containerId}`);
+};
+
+export const startDockerContainer = async (containerId: string) => {
+  await execAsync(`docker start ${containerId}`);
+};

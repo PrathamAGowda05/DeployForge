@@ -4,6 +4,8 @@ import {
   getDeployments,
   getDeployment,
   deleteDeployment,
+  stopDeployment,
+  startDeployment,
 } from "../controllers/deploymentController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
@@ -13,5 +15,7 @@ router.post("/", authMiddleware, createDeployment);
 router.get("/", authMiddleware, getDeployments);
 router.get("/:deploymentId", authMiddleware, getDeployment);
 router.delete("/:deploymentId", authMiddleware, deleteDeployment);
+router.post("/:deploymentId/stop", authMiddleware, stopDeployment);
+router.post("/:deploymentId/start", authMiddleware, startDeployment);
 
 export default router;
