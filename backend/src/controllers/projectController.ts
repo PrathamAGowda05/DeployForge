@@ -21,11 +21,11 @@ export const getProjects = async (req: Request, res: Response) => {
 };
 
 export const createProject = async (req: Request, res: Response) => {
-  const { name, status, repository_url } = req.body;
+  const { name, repository_url } = req.body;
 
-  if (!name || !status || !repository_url) {
+  if (!name || !repository_url) {
     return res.status(400).json({
-      error: "Name, status, and repository URL are required",
+      error: "Name and repository URL are required",
     });
   }
 
@@ -33,10 +33,10 @@ export const createProject = async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     const result = await pool.query(
-      `INSERT INTO projects (name, status, user_id, repository_url)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, status, user_id, repository_url`,
-      [name, status, userId, repository_url],
+      `INSERT INTO projects (name, user_id, repository_url)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [name, userId, repository_url],
     );
 
     res.status(201).json(result.rows[0]);

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
+import { deployProject } from "../services/deploymentService.js";
 
 export const createDeployment = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -7,9 +8,11 @@ export const createDeployment = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    // Make sure the project belongs to the logged-in user
+    // 1. Make sure the project belongs to the logged-in user
     const projectResult = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND user_id = $2",
+      `SELECT id, repository_url
+       FROM projects
+       WHERE id = $1 AND user_id = $2`,
       [id, userId],
     );
 
@@ -19,19 +22,70 @@ export const createDeployment = async (req: Request, res: Response) => {
       });
     }
 
-    // Create the deployment
-    const result = await pool.query(
+    const project = projectResult.rows[0];
+
+    // 2. Make sure the project has a repository
+    if (!project.repository_url) {
+      return res.status(400).json({
+        error: "Project does not have a repository URL",
+      });
+    }
+
+    // 3. Create deployment record
+    const deploymentResult = await pool.query(
       `INSERT INTO deployments (project_id, status)
        VALUES ($1, $2)
        RETURNING *`,
-      [id, "PENDING"],
+      [project.id, "PENDING"],
     );
 
-    res.status(201).json(result.rows[0]);
+    const deployment = deploymentResult.rows[0];
+
+    try {
+      // 4. Actually deploy the project
+      const result = await deployProject(
+        project.repository_url,
+        project.id,
+        deployment.id,
+      );
+
+      // 5. Deployment succeeded
+      const updatedDeployment = await pool.query(
+        `UPDATE deployments
+         SET status = $1,
+             logs = $2
+         WHERE id = $3
+         RETURNING *`,
+        ["SUCCESS", result.buildLogs, deployment.id],
+      );
+
+      return res.status(201).json({
+        deployment: updatedDeployment.rows[0],
+        containerId: result.containerId,
+        imageName: result.imageName,
+      });
+    } catch (deploymentError) {
+      console.error("Deployment failed:", deploymentError);
+
+      // 6. Deployment failed
+      const failedDeployment = await pool.query(
+        `UPDATE deployments
+         SET status = $1,
+             logs = $2
+         WHERE id = $3
+         RETURNING *`,
+        ["FAILED", String(deploymentError), deployment.id],
+      );
+
+      return res.status(500).json({
+        error: "Deployment failed",
+        deployment: failedDeployment.rows[0],
+      });
+    }
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Internal server error",
     });
   }
