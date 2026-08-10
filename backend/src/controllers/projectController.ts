@@ -80,39 +80,61 @@ export const updateProject = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, status } = req.body;
 
-  const result = await pool.query(
-    `UPDATE projects
-     SET name = $1, status = $2
-     WHERE id = $3
-     RETURNING *`,
-    [name, status, id],
-  );
+  try {
+    const userId = req.user!.userId;
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({
-      error: "Project not found",
+    const result = await pool.query(
+      `UPDATE projects
+       SET name = $1, status = $2
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [name, status, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Project not found",
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Internal server error",
     });
   }
-
-  res.json(result.rows[0]);
 };
 
 export const deleteProject = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const result = await pool.query(
-    "DELETE FROM projects WHERE id = $1 RETURNING *",
-    [id],
-  );
+  try {
+    const userId = req.user!.userId;
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({
-      error: "Project not found",
+    const result = await pool.query(
+      `DELETE FROM projects
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Project not found",
+      });
+    }
+
+    res.json({
+      message: "Project deleted successfully",
+      project: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Internal server error",
     });
   }
-
-  res.json({
-    message: "Project deleted successfully",
-    project: result.rows[0],
-  });
 };
