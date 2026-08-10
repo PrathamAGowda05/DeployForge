@@ -29,6 +29,12 @@ export const deployProject = async (
   // 3. Run Docker container
   const containerResult = await runDockerContainer(imageName, 3000);
 
+  // 4. Cleanup cloned repository
+  await fs.rm(repositoryPath, {
+    recursive: true,
+    force: true,
+  });
+
   return {
     repositoryPath,
     imageName,
