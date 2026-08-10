@@ -21,7 +21,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/auth", authRoutes);
 
 //Deployment Routes
-app.use("/projects/:id/deployments", deploymentRoutes);
+app.use("/api/projects/:id/deployments", deploymentRoutes);
 
 // Start Server
 app.listen(PORT, () => {
