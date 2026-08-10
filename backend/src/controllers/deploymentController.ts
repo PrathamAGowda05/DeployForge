@@ -63,6 +63,7 @@ export const createDeployment = async (req: Request, res: Response) => {
         deployment: updatedDeployment.rows[0],
         containerId: result.containerId,
         imageName: result.imageName,
+        hostPort: result.hostPort,
       });
     } catch (deploymentError) {
       console.error("Deployment failed:", deploymentError);

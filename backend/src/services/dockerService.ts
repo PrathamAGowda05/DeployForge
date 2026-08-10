@@ -17,9 +17,12 @@ export const buildDockerImage = async (
   };
 };
 
-export const runDockerContainer = async (imageName: string, port: number) => {
+export const runDockerContainer = async (
+  imageName: string,
+  hostPort: number,
+) => {
   const { stdout, stderr } = await execAsync(
-    `docker run -d -p ${port}:${port} ${imageName}`,
+    `docker run -d -p ${hostPort}:3000 ${imageName}`,
   );
 
   return {

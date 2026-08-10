@@ -3,6 +3,7 @@ import fs from "fs/promises";
 
 import { cloneRepository } from "./gitService.js";
 import { buildDockerImage, runDockerContainer } from "./dockerService.js";
+import { allocatePort } from "./portService.js";
 
 const workspaceRoot = path.resolve("workspace");
 
@@ -27,7 +28,8 @@ export const deployProject = async (
   const buildResult = await buildDockerImage(repositoryPath, imageName);
 
   // 3. Run Docker container
-  const containerResult = await runDockerContainer(imageName, 3000);
+  const hostPort = await allocatePort(deploymentId);
+  const containerResult = await runDockerContainer(imageName, hostPort);
 
   // 4. Cleanup cloned repository
   await fs.rm(repositoryPath, {
@@ -38,6 +40,7 @@ export const deployProject = async (
   return {
     repositoryPath,
     imageName,
+    hostPort,
     buildLogs: buildResult.logs,
     containerId: containerResult.containerId,
   };
