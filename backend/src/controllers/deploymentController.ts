@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
 import { deployProject } from "../services/deploymentService.js";
+import {
+  removeDockerContainer,
+  removeDockerImage,
+} from "../services/dockerService.js";
 
 export const createDeployment = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -91,6 +95,59 @@ export const createDeployment = async (req: Request, res: Response) => {
         deployment: failedDeployment.rows[0],
       });
     }
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+};
+
+export const deleteDeployment = async (req: Request, res: Response) => {
+  const { id, deploymentId } = req.params;
+
+  try {
+    const userId = req.user!.userId;
+
+    // Find deployment and make sure it belongs to the user's project
+    const result = await pool.query(
+      `SELECT d.*
+       FROM deployments d
+       JOIN projects p ON d.project_id = p.id
+       WHERE d.id = $1
+         AND d.project_id = $2
+         AND p.user_id = $3`,
+      [deploymentId, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Deployment not found",
+      });
+    }
+
+    const deployment = result.rows[0];
+
+    // Remove Docker container if one exists
+    if (deployment.container_id) {
+      await removeDockerContainer(deployment.container_id);
+    }
+
+    if (deployment.image_name) {
+      await removeDockerImage(deployment.image_name);
+    }
+
+    // Delete deployment record
+    await pool.query(
+      `DELETE FROM deployments
+       WHERE id = $1`,
+      [deploymentId],
+    );
+
+    return res.json({
+      message: "Deployment deleted successfully",
+    });
   } catch (error) {
     console.error(error);
 

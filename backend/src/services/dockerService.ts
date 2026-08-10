@@ -30,3 +30,11 @@ export const runDockerContainer = async (
     logs: `${stdout}\n${stderr}`,
   };
 };
+
+export const removeDockerContainer = async (containerId: string) => {
+  await execAsync(`docker rm -f ${containerId}`);
+};
+
+export const removeDockerImage = async (imageName: string) => {
+  await execAsync(`docker rmi ${imageName}`);
+};
