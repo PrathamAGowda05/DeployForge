@@ -11,6 +11,8 @@ import {
 
 import { allocatePort, releasePort } from "./portService.js";
 
+import { appendDeploymentLog } from "./deploymentLogService.js";
+
 const workspaceRoot = path.resolve("workspace");
 
 export const deployProject = async (
@@ -32,7 +34,13 @@ export const deployProject = async (
     await cloneRepository(repositoryUrl, repositoryPath);
 
     // 2. Build Docker image
-    const buildResult = await buildDockerImage(repositoryPath, imageName);
+    const buildResult = await buildDockerImage(
+      repositoryPath,
+      imageName,
+      (log) => {
+        appendDeploymentLog(deploymentId, log);
+      },
+    );
 
     // 3. Allocate port
     hostPort = await allocatePort(deploymentId);

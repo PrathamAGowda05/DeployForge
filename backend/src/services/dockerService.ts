@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
@@ -6,15 +6,52 @@ const execAsync = promisify(exec);
 export const buildDockerImage = async (
   repositoryPath: string,
   imageName: string,
+  onLog?: (log: string) => void,
 ) => {
-  const { stdout, stderr } = await execAsync(
-    `docker build -t ${imageName} "${repositoryPath}"`,
-  );
+  return new Promise<{
+    imageName: string;
+    logs: string;
+  }>((resolve, reject) => {
+    const dockerBuild = spawn("docker", [
+      "build",
+      "-t",
+      imageName,
+      repositoryPath,
+    ]);
 
-  return {
-    imageName,
-    logs: `${stdout}\n${stderr}`,
-  };
+    let logs = "";
+
+    dockerBuild.stdout.on("data", (data) => {
+      const output = data.toString();
+
+      logs += output;
+
+      if (onLog) {
+        onLog(output);
+      }
+    });
+
+    dockerBuild.stderr.on("data", (data) => {
+      const output = data.toString();
+
+      logs += output;
+
+      if (onLog) {
+        onLog(output);
+      }
+    });
+
+    dockerBuild.on("close", (code) => {
+      if (code === 0) {
+        resolve({
+          imageName,
+          logs,
+        });
+      } else {
+        reject(new Error(`Docker build failed with exit code ${code}`));
+      }
+    });
+  });
 };
 
 export const runDockerContainer = async (

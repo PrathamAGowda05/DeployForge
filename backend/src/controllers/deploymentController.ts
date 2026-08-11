@@ -9,6 +9,7 @@ import {
   stopDockerContainer,
 } from "../services/dockerService.js";
 import { releasePort } from "../services/portService.js";
+import { deploymentLogEmitter } from "../services/deploymentLogService.js";
 
 const executeDeployment = async (
   repositoryUrl: string,
@@ -113,6 +114,15 @@ const updateDeploymentStatus = async (deploymentId: number, status: string) => {
   );
 };
 
+const appendDeploymentLog = async (deploymentId: number, log: string) => {
+  await pool.query(
+    `UPDATE deployments
+     SET logs = COALESCE(logs, '') || $1
+     WHERE id = $2`,
+    [log, deploymentId],
+  );
+};
+
 export const createDeployment = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -135,18 +145,20 @@ export const createDeployment = async (req: Request, res: Response) => {
 
     const project = projectResult.rows[0];
 
+    // 2. Make sure project has repository
     if (!project.repository_url) {
       return res.status(400).json({
         error: "Project does not have a repository URL",
       });
     }
 
+    // 3. Check if deployment already exists
     const existingDeployment = await pool.query(
       `SELECT id, status
-        FROM deployments
-        WHERE project_id = $1
-        ORDER BY created_at DESC
-        LIMIT 1`,
+       FROM deployments
+       WHERE project_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
       [project.id],
     );
 
@@ -157,14 +169,7 @@ export const createDeployment = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. Make sure the project has a repository
-    if (!project.repository_url) {
-      return res.status(400).json({
-        error: "Project does not have a repository URL",
-      });
-    }
-
-    // 3. Create deployment record
+    // 4. Create deployment record
     const deploymentResult = await pool.query(
       `INSERT INTO deployments (project_id, status)
        VALUES ($1, $2)
@@ -174,35 +179,18 @@ export const createDeployment = async (req: Request, res: Response) => {
 
     const deployment = deploymentResult.rows[0];
 
-    try {
-      // 4. Execute deployment
-      const updatedDeployment = await executeDeployment(
-        project.repository_url,
-        project.id,
-        deployment.id,
-      );
+    // 5. Execute deployment in background
+    executeDeployment(project.repository_url, project.id, deployment.id).catch(
+      (error) => {
+        console.error("Background deployment failed:", error);
+      },
+    );
 
-      return res.status(201).json({
-        deployment: updatedDeployment,
-        containerId: updatedDeployment.container_id,
-        imageName: updatedDeployment.image_name,
-        hostPort: updatedDeployment.host_port,
-      });
-    } catch (deploymentError) {
-      console.error("Deployment failed:", deploymentError);
-
-      const failedDeployment = await pool.query(
-        `SELECT *
-         FROM deployments
-         WHERE id = $1`,
-        [deployment.id],
-      );
-
-      return res.status(500).json({
-        error: "Deployment failed",
-        deployment: failedDeployment.rows[0],
-      });
-    }
+    // 6. Return immediately
+    return res.status(201).json({
+      deploymentId: deployment.id,
+      status: "PENDING",
+    });
   } catch (error) {
     console.error(error);
 
@@ -556,4 +544,52 @@ export const redeployDeployment = async (req: Request, res: Response) => {
       error: "Internal server error",
     });
   }
+};
+
+export const getDeploymentLogs = async (req: Request, res: Response) => {
+  const { id, deploymentId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, status, logs
+       FROM deployments
+       WHERE id = $1
+       AND project_id = $2`,
+      [deploymentId, id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Deployment not found",
+      });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+};
+
+export const streamDeploymentLogs = async (req: Request, res: Response) => {
+  const { deploymentId } = req.params;
+
+  res.setHeader("Content-Type", "text/event-stream");
+
+  res.setHeader("Cache-Control", "no-cache");
+
+  res.setHeader("Connection", "keep-alive");
+
+  const listener = (log: string) => {
+    res.write(`data: ${log}\n\n`);
+  };
+
+  deploymentLogEmitter.on(String(deploymentId), listener);
+
+  req.on("close", () => {
+    deploymentLogEmitter.removeListener(String(deploymentId), listener);
+  });
 };
