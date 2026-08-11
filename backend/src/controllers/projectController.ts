@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
+import { removeDockerContainer, removeDockerImage } from "../services/dockerService.js";
 
 export const getProjects = async (req: Request, res: Response) => {
   try {
@@ -11,6 +12,7 @@ export const getProjects = async (req: Request, res: Response) => {
     );
 
     res.json(result.rows);
+    console.log("PROJECTS RESPONSE:", result.rows);
   } catch (error) {
     console.error(error);
 
@@ -113,27 +115,79 @@ export const deleteProject = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    const result = await pool.query(
-      `DELETE FROM projects
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
+    // 1. Make sure the project belongs to the logged-in user
+    const projectResult = await pool.query(
+      `SELECT *
+       FROM projects
+       WHERE id = $1 AND user_id = $2`,
       [id, userId],
     );
 
-    if (result.rows.length === 0) {
+    if (projectResult.rows.length === 0) {
       return res.status(404).json({
         error: "Project not found",
       });
     }
 
-    res.json({
+    const project = projectResult.rows[0];
+
+    // 2. Get all deployments belonging to the project
+    const deploymentsResult = await pool.query(
+      `SELECT *
+       FROM deployments
+       WHERE project_id = $1`,
+      [project.id],
+    );
+
+    const deployments = deploymentsResult.rows;
+
+    // 3. Clean up Docker resources for every deployment
+    for (const deployment of deployments) {
+      try {
+        if (deployment.container_id) {
+          await removeDockerContainer(deployment.container_id);
+        }
+      } catch (error) {
+        console.error(
+          `Container cleanup failed for deployment ${deployment.id}:`,
+          error,
+        );
+      }
+
+      try {
+        if (deployment.image_name) {
+          await removeDockerImage(deployment.image_name);
+        }
+      } catch (error) {
+        console.error(
+          `Image cleanup failed for deployment ${deployment.id}:`,
+          error,
+        );
+      }
+    }
+
+    // 4. Delete deployment records
+    await pool.query(
+      `DELETE FROM deployments
+       WHERE project_id = $1`,
+      [project.id],
+    );
+
+    // 5. Delete project
+    await pool.query(
+      `DELETE FROM projects
+       WHERE id = $1 AND user_id = $2`,
+      [project.id, userId],
+    );
+
+    return res.json({
       message: "Project deleted successfully",
-      project: result.rows[0],
+      project,
     });
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Internal server error",
     });
   }

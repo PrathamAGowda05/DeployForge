@@ -189,14 +189,13 @@ export const deleteDeployment = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    // Find deployment and make sure it belongs to the user's project
     const result = await pool.query(
       `SELECT d.*
        FROM deployments d
        JOIN projects p ON d.project_id = p.id
        WHERE d.id = $1
-         AND d.project_id = $2
-         AND p.user_id = $3`,
+       AND d.project_id = $2
+       AND p.user_id = $3`,
       [deploymentId, id, userId],
     );
 
@@ -208,16 +207,26 @@ export const deleteDeployment = async (req: Request, res: Response) => {
 
     const deployment = result.rows[0];
 
-    // Remove Docker container if one exists
-    if (deployment.container_id) {
-      await removeDockerContainer(deployment.container_id);
+    // Cleanup Docker resources but do not block deletion
+
+    try {
+      if (deployment.container_id) {
+        await removeDockerContainer(deployment.container_id);
+      }
+    } catch (error) {
+      console.error("Container cleanup failed:", error);
     }
 
-    if (deployment.image_name) {
-      await removeDockerImage(deployment.image_name);
+    try {
+      if (deployment.image_name) {
+        await removeDockerImage(deployment.image_name);
+      }
+    } catch (error) {
+      console.error("Image cleanup failed:", error);
     }
 
-    // Delete deployment record
+    // Always delete DB record
+
     await pool.query(
       `DELETE FROM deployments
        WHERE id = $1`,
@@ -617,13 +626,23 @@ export const streamDeploymentLogs = async (req: Request, res: Response) => {
     // 3. Send existing logs
     if (deployment.logs) {
       res.write(`event: log\n`);
-      res.write(`data: ${deployment.logs}\n\n`);
+
+      deployment.logs.split("\n").forEach((line: string) => {
+        res.write(`data: ${line}\n`);
+      });
+
+      res.write("\n");
     }
 
     // 4. Listen for new deployment events
     const listener = (event: { type: string; data: string }) => {
       res.write(`event: ${event.type}\n`);
-      res.write(`data: ${event.data}\n\n`);
+
+      event.data.split("\n").forEach((line) => {
+        res.write(`data: ${line}\n`);
+      });
+
+      res.write("\n");
     };
 
     deploymentEventEmitter.on(String(deploymentId), listener);
