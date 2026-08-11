@@ -9,7 +9,10 @@ import {
   stopDockerContainer,
 } from "../services/dockerService.js";
 import { releasePort } from "../services/portService.js";
-import { deploymentLogEmitter } from "../services/deploymentLogService.js";
+import {
+  deploymentEventEmitter,
+  emitDeploymentStatus,
+} from "../services/deploymentLogService.js";
 
 const executeDeployment = async (
   repositoryUrl: string,
@@ -112,15 +115,8 @@ const updateDeploymentStatus = async (deploymentId: number, status: string) => {
      WHERE id = $2`,
     [status, deploymentId],
   );
-};
 
-const appendDeploymentLog = async (deploymentId: number, log: string) => {
-  await pool.query(
-    `UPDATE deployments
-     SET logs = COALESCE(logs, '') || $1
-     WHERE id = $2`,
-    [log, deploymentId],
-  );
+  emitDeploymentStatus(deploymentId, status);
 };
 
 export const createDeployment = async (req: Request, res: Response) => {
@@ -607,15 +603,17 @@ export const streamDeploymentLogs = async (req: Request, res: Response) => {
     }
 
     // 3. Listen for new log chunks
-    const listener = (log: string) => {
-      res.write(`data: ${log}\n\n`);
+    const listener = (event: { type: string; data: string }) => {
+      res.write(`event: ${event.type}\n`);
+
+      res.write(`data: ${event.data}\n\n`);
     };
 
-    deploymentLogEmitter.on(String(deploymentId), listener);
+    deploymentEventEmitter.on(String(deploymentId), listener);
 
     // 4. Cleanup when client disconnects
     req.on("close", () => {
-      deploymentLogEmitter.removeListener(String(deploymentId), listener);
+      deploymentEventEmitter.removeListener(String(deploymentId), listener);
     });
   } catch (error) {
     console.error("SSE log stream error:", error);

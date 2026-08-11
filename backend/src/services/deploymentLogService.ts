@@ -1,13 +1,13 @@
 import { EventEmitter } from "events";
 import { pool } from "../db.js";
 
-export const deploymentLogEmitter = new EventEmitter();
+export const deploymentEventEmitter = new EventEmitter();
 
 export const appendDeploymentLog = async (
   deploymentId: number,
   log: string,
 ) => {
-  // 1. Save permanently
+  // 1. Save log permanently in database
   await pool.query(
     `UPDATE deployments
      SET logs = COALESCE(logs, '') || $1
@@ -15,6 +15,17 @@ export const appendDeploymentLog = async (
     [log, deploymentId],
   );
 
-  // 2. Send live event
-  deploymentLogEmitter.emit(String(deploymentId), log);
+  // 2. Emit log event to SSE listeners
+  deploymentEventEmitter.emit(String(deploymentId), {
+    type: "log",
+    data: log,
+  });
+};
+
+export const emitDeploymentStatus = (deploymentId: number, status: string) => {
+  // Emit status event to SSE listeners
+  deploymentEventEmitter.emit(String(deploymentId), {
+    type: "status",
+    data: status,
+  });
 };
