@@ -15,68 +15,32 @@ const executeDeployment = async (
   projectId: number,
   deploymentId: number,
 ) => {
-  let containerId: string | null = null;
-  let imageName: string | null = null;
+  await updateDeploymentStatus(deploymentId, "BUILDING");
 
-  try {
-    const result = await deployProject(repositoryUrl, projectId, deploymentId);
+  const result = await deployProject(repositoryUrl, projectId, deploymentId);
 
-    containerId = result.containerId;
-    imageName = result.imageName;
+  await updateDeploymentStatus(deploymentId, "STARTING");
 
-    const updatedDeployment = await pool.query(
-      `UPDATE deployments
-       SET status = $1,
-           logs = $2,
-           container_id = $3,
-           image_name = $4
-       WHERE id = $5
-       RETURNING *`,
-      [
-        "RUNNING",
-        result.buildLogs,
-        result.containerId,
-        result.imageName,
-        deploymentId,
-      ],
-    );
+  const updatedDeployment = await pool.query(
+    `UPDATE deployments
+     SET status = $1,
+         logs = $2,
+         container_id = $3,
+         image_name = $4,
+         host_port = $5
+     WHERE id = $6
+     RETURNING *`,
+    [
+      "RUNNING",
+      result.buildLogs,
+      result.containerId,
+      result.imageName,
+      result.hostPort,
+      deploymentId,
+    ],
+  );
 
-    return updatedDeployment.rows[0];
-  } catch (error) {
-    console.error("Deployment execution failed:", error);
-
-    // Clean up container if one was created
-    if (containerId) {
-      try {
-        await removeDockerContainer(containerId);
-      } catch (cleanupError) {
-        console.error("Failed to remove deployment container:", cleanupError);
-      }
-    }
-
-    // Clean up image if one was created
-    if (imageName) {
-      try {
-        await removeDockerImage(imageName);
-      } catch (cleanupError) {
-        console.error("Failed to remove deployment image:", cleanupError);
-      }
-    }
-
-    // Release allocated port
-    await releasePort(deploymentId);
-
-    // Mark deployment as FAILED
-    await pool.query(
-      `UPDATE deployments
-       SET status = $1,
-           logs = $2
-       WHERE id = $3`,
-      ["FAILED", String(error), deploymentId],
-    );
-
-    throw error;
-  }
+  return updatedDeployment.rows[0];
 };
 
 const syncDeploymentStatus = async (deployment: any) => {
@@ -137,6 +101,15 @@ const cleanupDeployment = async (deployment: any) => {
      SET status = $1
      WHERE id = $2`,
     ["STOPPED", deployment.id],
+  );
+};
+
+const updateDeploymentStatus = async (deploymentId: number, status: string) => {
+  await pool.query(
+    `UPDATE deployments
+     SET status = $1
+     WHERE id = $2`,
+    [status, deploymentId],
   );
 };
 
