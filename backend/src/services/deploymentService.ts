@@ -11,7 +11,10 @@ import {
 
 import { allocatePort, releasePort } from "./portService.js";
 
-import { appendDeploymentLog } from "./deploymentLogService.js";
+import {
+  appendDeploymentLog,
+  emitDeploymentStatus,
+} from "./deploymentEventService.js";
 
 const workspaceRoot = path.resolve("workspace");
 
@@ -34,11 +37,13 @@ export const deployProject = async (
     await cloneRepository(repositoryUrl, repositoryPath);
 
     // 2. Build Docker image
+    emitDeploymentStatus(deploymentId, "BUILDING");
+
     const buildResult = await buildDockerImage(
       repositoryPath,
       imageName,
       (log) => {
-        appendDeploymentLog(deploymentId, log);
+        appendDeploymentLog(deploymentId, log).catch(console.error);
       },
     );
 
@@ -46,9 +51,13 @@ export const deployProject = async (
     hostPort = await allocatePort(deploymentId);
 
     // 4. Run Docker container
+    emitDeploymentStatus(deploymentId, "STARTING");
+
     const containerResult = await runDockerContainer(imageName, hostPort);
 
     containerId = containerResult.containerId;
+
+    emitDeploymentStatus(deploymentId, "RUNNING");
 
     return {
       repositoryPath,
@@ -58,6 +67,8 @@ export const deployProject = async (
       containerId,
     };
   } catch (error) {
+    emitDeploymentStatus(deploymentId, "FAILED");
+
     console.error(`Deployment ${deploymentId} failed:`, error);
 
     // Remove container if it was created

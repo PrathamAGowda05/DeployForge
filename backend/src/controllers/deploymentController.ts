@@ -12,18 +12,14 @@ import { releasePort } from "../services/portService.js";
 import {
   deploymentEventEmitter,
   emitDeploymentStatus,
-} from "../services/deploymentLogService.js";
+} from "../services/deploymentEventService.js";
 
 const executeDeployment = async (
   repositoryUrl: string,
   projectId: number,
   deploymentId: number,
 ) => {
-  await updateDeploymentStatus(deploymentId, "BUILDING");
-
   const result = await deployProject(repositoryUrl, projectId, deploymentId);
-
-  await updateDeploymentStatus(deploymentId, "STARTING");
 
   const updatedDeployment = await pool.query(
     `UPDATE deployments
@@ -108,17 +104,6 @@ const cleanupDeployment = async (deployment: any) => {
   );
 };
 
-const updateDeploymentStatus = async (deploymentId: number, status: string) => {
-  await pool.query(
-    `UPDATE deployments
-     SET status = $1
-     WHERE id = $2`,
-    [status, deploymentId],
-  );
-
-  emitDeploymentStatus(deploymentId, status);
-};
-
 export const createDeployment = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -174,6 +159,8 @@ export const createDeployment = async (req: Request, res: Response) => {
     );
 
     const deployment = deploymentResult.rows[0];
+
+    emitDeploymentStatus(deployment.id, "PENDING");
 
     // 5. Execute deployment in background
     executeDeployment(project.repository_url, project.id, deployment.id).catch(
@@ -576,48 +563,51 @@ export const streamDeploymentLogs = async (req: Request, res: Response) => {
   try {
     // SSE headers
     res.setHeader("Content-Type", "text/event-stream");
-
     res.setHeader("Cache-Control", "no-cache");
-
     res.setHeader("Connection", "keep-alive");
 
-    // 1. Fetch existing logs from database
-    const logsResult = await pool.query(
-      `SELECT logs
+    // 1. Fetch current status + existing logs
+    const deploymentResult = await pool.query(
+      `SELECT status, logs
        FROM deployments
        WHERE id = $1`,
       [deploymentId],
     );
 
-    if (logsResult.rows.length === 0) {
+    if (deploymentResult.rows.length === 0) {
       return res.status(404).json({
         error: "Deployment not found",
       });
     }
 
-    const existingLogs = logsResult.rows[0].logs;
+    const deployment = deploymentResult.rows[0];
 
-    // 2. Send existing logs first
-    if (existingLogs) {
-      res.write(`data: ${existingLogs}\n\n`);
+    // 2. Send current status first
+    if (deployment.status) {
+      res.write(`event: status\n`);
+      res.write(`data: ${deployment.status}\n\n`);
     }
 
-    // 3. Listen for new log chunks
+    // 3. Send existing logs
+    if (deployment.logs) {
+      res.write(`event: log\n`);
+      res.write(`data: ${deployment.logs}\n\n`);
+    }
+
+    // 4. Listen for new deployment events
     const listener = (event: { type: string; data: string }) => {
       res.write(`event: ${event.type}\n`);
-
       res.write(`data: ${event.data}\n\n`);
     };
 
     deploymentEventEmitter.on(String(deploymentId), listener);
 
-    // 4. Cleanup when client disconnects
+    // 5. Cleanup when client disconnects
     req.on("close", () => {
       deploymentEventEmitter.removeListener(String(deploymentId), listener);
     });
   } catch (error) {
     console.error("SSE log stream error:", error);
-
     res.end();
   }
 };
