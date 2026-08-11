@@ -1,11 +1,20 @@
 import express from "express";
+import cors from "cors";
+
 import projectRoutes from "./routes/projectRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import deploymentRoutes from "./routes/deploymentRoutes.js";
 import "./db.js";
 
 const app = express();
+
 const PORT = 4000;
+
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+  }),
+);
 
 app.use(express.json());
 
@@ -17,10 +26,10 @@ app.get("/api/health", (req, res) => {
 // Project Routes
 app.use("/api/projects", projectRoutes);
 
-//Authentication Routes
+// Authentication Routes
 app.use("/api/auth", authRoutes);
 
-//Deployment Routes
+// Deployment Routes
 app.use("/api/projects/:id/deployments", deploymentRoutes);
 
 // Start Server
