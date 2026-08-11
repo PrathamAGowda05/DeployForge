@@ -3,6 +3,13 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Label from "@/components/ui/Label";
+import Alert from "@/components/ui/Alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -59,44 +66,56 @@ export default function NewProjectPage() {
   };
 
   return (
-    <main>
-      <h1>Create Project</h1>
+    <AppShell>
+      <PageHeader
+        index="01 — PROJECTS"
+        title="Create Project"
+        subtitle="Initialize a new repository-backed project"
+      />
 
-      <form onSubmit={handleCreateProject}>
-        <div>
-          <label htmlFor="name">Project Name</label>
+      <Card className="max-w-xl">
+        <CardHeader label="// NEW PROJECT">
+          <CardTitle>Project Configuration</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleCreateProject} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="name">Project Name</Label>
 
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-          />
-        </div>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </div>
 
-        <div>
-          <label htmlFor="repositoryUrl">Repository URL</label>
+            <div className="space-y-2">
+              <Label htmlFor="repositoryUrl">Repository URL</Label>
 
-          <input
-            id="repositoryUrl"
-            type="url"
-            value={repositoryUrl}
-            onChange={(event) => setRepositoryUrl(event.target.value)}
-            required
-          />
-        </div>
+              <Input
+                id="repositoryUrl"
+                type="url"
+                value={repositoryUrl}
+                onChange={(event) => setRepositoryUrl(event.target.value)}
+                required
+              />
+            </div>
 
-        {error && <p>{error}</p>}
+            {error && <Alert>{error}</Alert>}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Creating..." : "Create Project"}
-        </button>
-      </form>
-
-      <button type="button" onClick={() => router.push("/projects")}>
-        Back to Projects
-      </button>
-    </main>
+            <div className="flex gap-2 pt-2">
+              <Button type="submit" variant="primary" disabled={loading}>
+                {loading ? "Creating..." : "> CREATE_PROJECT"}
+              </Button>
+              <Button type="button" onClick={() => router.push("/projects")}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </AppShell>
   );
 }

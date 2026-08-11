@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 interface Deployment {
   id: number;
@@ -74,57 +80,89 @@ export default function DeploymentHistoryPage() {
 
   if (loading) {
     return (
-      <main>
-        <h1>Deployment History</h1>
-
-        <p>Loading deployments...</p>
-      </main>
+      <AppShell>
+        <PageHeader index="02 — DEPLOYMENTS" title="Deployment History" />
+        <Spinner label="Loading deployments" />
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Deployment History</h1>
+    <AppShell>
+      <PageHeader
+        index="02 — DEPLOYMENTS"
+        title="Deployment History"
+        subtitle={`Project ${projectId}`}
+        actions={
+          <Button onClick={() => router.push(`/projects/${projectId}`)}>
+            Back to Project
+          </Button>
+        }
+      />
 
-      {error && <p>{error}</p>}
+      {error && <Alert className="mb-6">{error}</Alert>}
 
       {deployments.length === 0 ? (
-        <p>No deployments found.</p>
+        <div className="border border-border-subtle bg-bg-surface p-8 text-center">
+          <p className="font-mono text-xs text-text-muted">{"// NO DEPLOYMENTS"}</p>
+          <p className="mt-2 text-sm text-text-secondary">No deployments found.</p>
+        </div>
       ) : (
-        deployments.map((deployment) => (
-          <section key={deployment.id}>
-            <h2>Deployment {deployment.id}</h2>
+        <div className="border border-border-subtle">
+          <div className="hidden border-b border-border-subtle bg-bg-surface px-4 py-2 sm:grid sm:grid-cols-[80px_1fr_120px_140px_1fr] sm:gap-4">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">ID</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">Status</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">Port</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">Created</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted">Actions</span>
+          </div>
 
-            <p>Status: {deployment.status}</p>
-
-            <p>Created: {deployment.created_at}</p>
-
-            <p>Image: {deployment.image_name || "N/A"}</p>
-
-            <p>Port: {deployment.host_port || "N/A"}</p>
-
-            <button
-              onClick={() =>
-                router.push(
-                  `/projects/${projectId}/deployments/${deployment.id}`,
-                )
-              }
+          {deployments.map((deployment) => (
+            <div
+              key={deployment.id}
+              className="border-b border-border-subtle px-4 py-4 last:border-b-0 sm:grid sm:grid-cols-[80px_1fr_120px_140px_1fr] sm:items-center sm:gap-4 sm:py-3"
             >
-              View Details
-            </button>
+              <span className="font-mono text-sm text-text-primary">
+                #{deployment.id}
+              </span>
 
-            <button onClick={() => deleteDeployment(deployment.id)}>
-              Delete Deployment
-            </button>
-          </section>
-        ))
+              <div className="mt-2 sm:mt-0">
+                <StatusBadge status={deployment.status} />
+              </div>
+
+              <span className="mt-2 font-mono text-xs text-text-secondary sm:mt-0">
+                {deployment.host_port || "N/A"}
+              </span>
+
+              <span className="mt-2 font-mono text-xs text-text-muted sm:mt-0">
+                {deployment.created_at}
+              </span>
+
+              <div className="mt-3 flex flex-wrap gap-2 sm:mt-0">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() =>
+                    router.push(
+                      `/projects/${projectId}/deployments/${deployment.id}`,
+                    )
+                  }
+                >
+                  View
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => deleteDeployment(deployment.id)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-
-      <br />
-
-      <button onClick={() => router.push(`/projects/${projectId}`)}>
-        Back to Project
-      </button>
-    </main>
+    </AppShell>
   );
 }

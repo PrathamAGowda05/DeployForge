@@ -3,6 +3,12 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import AuthLayout from "@/components/layout/AuthLayout";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Label from "@/components/ui/Label";
+import Alert from "@/components/ui/Alert";
+import { Card, CardContent } from "@/components/ui/Card";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -36,45 +42,52 @@ export default function RegisterPage() {
   };
 
   return (
-    <main>
-      <h1>Register</h1>
+    <AuthLayout title="Create Account" subtitle="Register for deployment access">
+      <Card>
+        <CardContent>
+          <form onSubmit={handleRegister} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
 
-      <form onSubmit={handleRegister}>
-        <div>
-          <label htmlFor="email">Email</label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </div>
 
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
 
-        <div>
-          <label htmlFor="password">Password</label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
 
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={8}
-            required
-          />
-        </div>
+            {error && <Alert>{error}</Alert>}
 
-        {error && <p>{error}</p>}
+            <Button type="submit" variant="primary" disabled={loading} className="w-full">
+              {loading ? "Registering..." : "> CREATE_ACCOUNT"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Registering..." : "Register"}
-        </button>
-      </form>
-
-      <button type="button" onClick={() => router.push("/login")}>
-        Already have an account? Login
-      </button>
-    </main>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => router.push("/login")}
+        className="mt-6 w-full"
+      >
+        Already have an account? Sign In
+      </Button>
+    </AuthLayout>
   );
 }

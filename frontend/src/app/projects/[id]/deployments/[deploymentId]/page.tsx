@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
+import StatusBadge from "@/components/ui/StatusBadge";
+import LogViewer from "@/components/ui/LogViewer";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface Deployment {
   id: number;
@@ -74,49 +82,92 @@ export default function DeploymentDetailsPage() {
 
   if (loading) {
     return (
-      <main>
-        <h1>Loading deployment...</h1>
-      </main>
+      <AppShell>
+        <PageHeader title="Deployment Details" />
+        <Spinner label="Loading deployment" />
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Deployment Details</h1>
+    <AppShell>
+      <PageHeader
+        title="Deployment Details"
+        subtitle={`Deployment #${deploymentId}`}
+        actions={
+          <Button onClick={() => router.push(`/projects/${projectId}/deployments`)}>
+            Back to History
+          </Button>
+        }
+      />
 
-      {error && <p>{error}</p>}
+      {error && <Alert className="mb-6">{error}</Alert>}
 
       {deployment && (
         <>
-          <section>
-            <h2>Information</h2>
+          <Card className="mb-6">
+            <CardHeader label="// DEPLOYMENT INFO">
+              <CardTitle>Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Deployment ID
+                  </p>
+                  <p className="font-mono text-sm text-text-primary">{deployment.id}</p>
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Status
+                  </p>
+                  <StatusBadge status={deployment.status} />
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Created
+                  </p>
+                  <p className="font-mono text-sm text-text-secondary">{deployment.created_at}</p>
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Commit
+                  </p>
+                  <p className="font-mono text-sm text-text-secondary">
+                    {deployment.commit_hash || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Image
+                  </p>
+                  <p className="font-mono text-sm text-text-secondary truncate">
+                    {deployment.image_name || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Container
+                  </p>
+                  <p className="font-mono text-sm text-text-secondary truncate">
+                    {deployment.container_id || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                    Host Port
+                  </p>
+                  <p className="font-mono text-sm text-text-secondary">
+                    {deployment.host_port || "N/A"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            <p>Deployment ID: {deployment.id}</p>
-
-            <p>Status: {deployment.status}</p>
-
-            <p>Created: {deployment.created_at}</p>
-
-            <p>Commit: {deployment.commit_hash || "N/A"}</p>
-
-            <p>Image: {deployment.image_name || "N/A"}</p>
-
-            <p>Container: {deployment.container_id || "N/A"}</p>
-
-            <p>Host Port: {deployment.host_port || "N/A"}</p>
-          </section>
-
-          <section>
-            <h2>Logs</h2>
-
-            <pre>{logs || "No logs available"}</pre>
-          </section>
+          <LogViewer logs={logs} placeholder="No logs available" />
         </>
       )}
-
-      <button onClick={() => router.push(`/projects/${projectId}/deployments`)}>
-        Back to Deployment History
-      </button>
-    </main>
+    </AppShell>
   );
 }

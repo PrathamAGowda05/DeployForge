@@ -3,6 +3,11 @@
 import { useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import AuthLayout from "@/components/layout/AuthLayout";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Label from "@/components/ui/Label";
+import { Card, CardContent } from "@/components/ui/Card";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -35,30 +40,47 @@ export default function LoginPage() {
   };
 
   return (
-    <main>
-      <h1>Login</h1>
+    <AuthLayout title="Sign In" subtitle="Access your deployment infrastructure">
+      <Card>
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
 
-      <form onSubmit={handleLogin}>
-        <div>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-        <div>
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+            <Button type="submit" variant="primary" className="w-full">
+              {">"} SIGN_IN
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <button type="submit">Login</button>
-      </form>
-    </main>
+      <p className="mt-6 text-center text-sm text-text-secondary">
+        No account?{" "}
+        <button
+          type="button"
+          onClick={() => router.push("/register")}
+          className="font-mono text-text-primary underline-offset-2 hover:underline"
+        >
+          Register
+        </button>
+      </p>
+    </AuthLayout>
   );
 }

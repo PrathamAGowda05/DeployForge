@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface ConfirmDeleteProps {
   title?: string;
@@ -33,30 +36,43 @@ export default function ConfirmDelete({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" variant="danger" onClick={() => setOpen(true)}>
         Delete
-      </button>
+      </Button>
 
       {open && (
-        <section>
-          <h2>{title}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/80 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader label="// CONFIRM">
+              <CardTitle>{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-text-secondary">{message}</p>
 
-          <p>{message}</p>
+              {error && <Alert>{error}</Alert>}
 
-          {error && <p>{error}</p>}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setOpen(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
 
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            disabled={deleting}
-          >
-            Cancel
-          </button>
-
-          <button type="button" onClick={handleConfirm} disabled={deleting}>
-            {deleting ? "Deleting..." : "Confirm Delete"}
-          </button>
-        </section>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={handleConfirm}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : "Confirm Delete"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </>
   );

@@ -3,6 +3,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Label from "@/components/ui/Label";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface Project {
   id: number;
@@ -73,68 +81,78 @@ export default function EditProjectPage() {
 
   if (loading) {
     return (
-      <main>
-        <h1>Edit Project</h1>
-        <p>Loading project...</p>
-      </main>
+      <AppShell>
+        <PageHeader title="Edit Project" />
+        <Spinner label="Loading project" />
+      </AppShell>
     );
   }
 
   if (!project) {
     return (
-      <main>
-        <h1>Edit Project</h1>
-        <p>{error || "Project not found"}</p>
-
-        <button onClick={() => router.push("/projects")}>
+      <AppShell>
+        <PageHeader title="Edit Project" />
+        <Alert>{error || "Project not found"}</Alert>
+        <Button onClick={() => router.push("/projects")} className="mt-4">
           Back to Projects
-        </button>
-      </main>
+        </Button>
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Edit Project</h1>
+    <AppShell>
+      <PageHeader
+        title="Edit Project"
+        subtitle={`./${project.name.toLowerCase().replace(/\s+/g, "-")}`}
+      />
 
-      {error && <p>{error}</p>}
+      <Card className="max-w-xl">
+        <CardHeader label="// EDIT">
+          <CardTitle>Project Configuration</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="name">Project Name</Label>
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="name">Project Name</label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </div>
 
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="status">Project Status</Label>
 
-        <div>
-          <label htmlFor="status">Project Status</label>
+              <Input
+                id="status"
+                type="text"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                required
+              />
+            </div>
 
-          <input
-            id="status"
-            type="text"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-            required
-          />
-        </div>
+            {error && <Alert>{error}</Alert>}
 
-        <button type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
-      </form>
-
-      <button
-        type="button"
-        onClick={() => router.push(`/projects/${projectId}`)}
-      >
-        Cancel
-      </button>
-    </main>
+            <div className="flex gap-2 pt-2">
+              <Button type="submit" variant="primary" disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => router.push(`/projects/${projectId}`)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </AppShell>
   );
 }

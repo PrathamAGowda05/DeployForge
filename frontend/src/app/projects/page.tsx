@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import ProjectCard from "@/components/projects/ProjectCard";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
 
 interface Project {
   id: number;
@@ -55,60 +61,55 @@ export default function ProjectsPage() {
 
   if (loading) {
     return (
-      <main>
-        <h1>Projects</h1>
-        <p>Loading projects...</p>
-      </main>
+      <AppShell>
+        <PageHeader index="01 — PROJECTS" title="Projects" />
+        <Spinner label="Loading projects" />
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Projects</h1>
+    <AppShell>
+      <PageHeader
+        index="01 — PROJECTS"
+        title="Projects"
+        subtitle="Repository-backed deployment projects"
+        actions={
+          <>
+            <Button variant="primary" onClick={() => router.push("/projects/new")}>
+              {">"} CREATE_PROJECT
+            </Button>
+            <Button onClick={() => router.push("/profile")}>Profile</Button>
+          </>
+        }
+      />
 
-      {error && <p>{error}</p>}
+      {error && <Alert className="mb-6">{error}</Alert>}
 
       {projects.length === 0 ? (
-        <div>
-          <p>No projects found.</p>
+        <div className="border border-border-subtle bg-bg-surface p-8 text-center">
+          <p className="font-mono text-xs text-text-muted">{"// NO PROJECTS"}</p>
+          <p className="mt-2 text-sm text-text-secondary">No projects found.</p>
 
-          <button onClick={() => router.push("/projects/new")}>
-            Create Project
-          </button>
+          <Button
+            variant="primary"
+            onClick={() => router.push("/projects/new")}
+            className="mt-6"
+          >
+            {">"} CREATE_PROJECT
+          </Button>
         </div>
       ) : (
-        <>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
-            <section key={project.id}>
-              <h2>{project.name}</h2>
-
-              <p>Status: {project.status}</p>
-
-              <p>
-                Repository:{" "}
-                <a
-                  href={project.repository_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {project.repository_url}
-                </a>
-              </p>
-
-              <button onClick={() => router.push(`/projects/${project.id}`)}>
-                Open Project
-              </button>
-            </section>
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onOpen={() => router.push(`/projects/${project.id}`)}
+            />
           ))}
-
-          <br />
-
-          <button onClick={() => router.push("/projects/new")}>
-            Create Project
-          </button>
-          <button onClick={() => router.push("/profile")}>Profile</button>
-        </>
+        </div>
       )}
-    </main>
+    </AppShell>
   );
 }

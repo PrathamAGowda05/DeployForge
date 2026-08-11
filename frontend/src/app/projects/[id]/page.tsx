@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ConfirmDelete from "@/components/ConfirmDelete";
 import api from "@/lib/api";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
+import StatusBadge from "@/components/ui/StatusBadge";
+import LogViewer from "@/components/ui/LogViewer";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface Project {
   id: number;
@@ -24,6 +32,36 @@ interface Deployment {
   image_name: string | null;
 }
 
+const ACTIVE_STATUSES = ["PENDING", "BUILDING", "STARTING", "RUNNING"];
+const CURRENT_STATUSES = [...ACTIVE_STATUSES, "STOPPED"];
+const TRANSITIONAL_STATUSES = ["PENDING", "BUILDING", "STARTING"];
+
+function selectCurrentDeployment(deployments: Deployment[]): Deployment | null {
+  const sorted = [...deployments].sort((a, b) => b.id - a.id);
+
+  return (
+    sorted.find((deployment) => CURRENT_STATUSES.includes(deployment.status)) ??
+    null
+  );
+}
+
+function mergeDeploymentState(
+  previous: Deployment | null,
+  next: Deployment,
+): Deployment {
+  if (!previous) {
+    return next;
+  }
+
+  return {
+    ...next,
+    image_name: next.image_name ?? previous.image_name,
+    container_id: next.container_id ?? previous.container_id,
+    host_port: next.host_port ?? previous.host_port,
+    commit_hash: next.commit_hash ?? previous.commit_hash,
+  };
+}
+
 export default function ProjectDashboard() {
   const params = useParams();
   const router = useRouter();
@@ -37,6 +75,7 @@ export default function ProjectDashboard() {
   const [loading, setLoading] = useState(true);
 
   const streamRef = useRef<EventSource | null>(null);
+  const streamDeploymentIdRef = useRef<number | null>(null);
 
   const fetchProjectData = async () => {
     try {
@@ -52,21 +91,10 @@ export default function ProjectDashboard() {
 
       const deployments: Deployment[] = deploymentResponse.data;
 
-      /*
-       * Deployment history contains old FAILED/STOPPED
-       * deployments too.
-       *
-       * Only an active deployment should appear as the
-       * current deployment on this page.
-       */
-      const activeDeployment = deployments.find((deployment) =>
-        ["PENDING", "BUILDING", "STARTING", "RUNNING"].includes(
-          deployment.status,
-        ),
-      );
+      const currentDeployment = selectCurrentDeployment(deployments);
 
-      if (activeDeployment) {
-        setDeployment(activeDeployment);
+      if (currentDeployment) {
+        setDeployment(currentDeployment);
       } else {
         setDeployment(null);
         setLogs("");
@@ -95,6 +123,8 @@ export default function ProjectDashboard() {
       streamRef.current.close();
     }
 
+    streamDeploymentIdRef.current = deploymentId;
+
     if (clear) {
       setLogs("");
     }
@@ -111,7 +141,7 @@ export default function ProjectDashboard() {
 
     stream.addEventListener("status", (event: MessageEvent) => {
       setDeployment((previous) => {
-        if (!previous) {
+        if (!previous || previous.id !== deploymentId) {
           return previous;
         }
 
@@ -125,8 +155,48 @@ export default function ProjectDashboard() {
     stream.onerror = () => {
       console.log("SSE disconnected");
       stream.close();
+
+      if (streamRef.current === stream) {
+        streamRef.current = null;
+      }
+
+      window.setTimeout(() => {
+        if (streamDeploymentIdRef.current === deploymentId) {
+          connectLogs(deploymentId);
+        }
+      }, 2000);
     };
   };
+
+  useEffect(() => {
+    if (!deployment) {
+      return;
+    }
+
+    if (!TRANSITIONAL_STATUSES.includes(deployment.status)) {
+      return;
+    }
+
+    const pollDeploymentStatus = async () => {
+      try {
+        const response = await api.get(
+          `/api/projects/${projectId}/deployments/${deployment.id}`,
+        );
+
+        setDeployment((previous) =>
+          mergeDeploymentState(previous, response.data),
+        );
+      } catch (pollError) {
+        console.error(pollError);
+      }
+    };
+
+    const interval = window.setInterval(pollDeploymentStatus, 2000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [deployment?.id, deployment?.status, projectId]);
 
   useEffect(() => {
     if (deployment) {
@@ -146,9 +216,37 @@ export default function ProjectDashboard() {
 
       const deploymentId = response.data.deploymentId;
 
-      await fetchProjectData();
+      const refreshDeployment = async () => {
+        const [projectResponse, deploymentResponse] = await Promise.all([
+          api.get(`/api/projects/${projectId}`),
+          api.get(`/api/projects/${projectId}/deployments/${deploymentId}`),
+        ]);
+
+        setProject(projectResponse.data);
+        setDeployment(deploymentResponse.data);
+
+        return deploymentResponse.data as Deployment;
+      };
+
+      let currentDeployment = await refreshDeployment();
 
       connectLogs(deploymentId, true);
+
+      const needsMetadata = (value: Deployment) =>
+        !value.image_name || !value.container_id || value.host_port == null;
+
+      let attempts = 0;
+
+      while (
+        attempts < 15 &&
+        (TRANSITIONAL_STATUSES.includes(currentDeployment.status) ||
+          (currentDeployment.status === "RUNNING" &&
+            needsMetadata(currentDeployment)))
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        currentDeployment = await refreshDeployment();
+        attempts++;
+      }
     } catch (error: any) {
       console.error(error);
 
@@ -166,11 +264,24 @@ export default function ProjectDashboard() {
         {},
       );
 
-      const newDeployment = response.data.deployment;
+      const deploymentId: number | undefined =
+        response.data.deploymentId ?? response.data.deployment?.id;
 
-      setDeployment(newDeployment);
+      if (!deploymentId) {
+        await fetchProjectData();
+        return;
+      }
 
-      connectLogs(newDeployment.id, true);
+      const deploymentResponse = await api.get(
+        `/api/projects/${projectId}/deployments/${deploymentId}`,
+      );
+
+      const nextDeployment = deploymentResponse.data;
+
+      setDeployment((previous) =>
+        mergeDeploymentState(previous, nextDeployment),
+      );
+      connectLogs(nextDeployment.id, true);
     } catch (error: any) {
       console.error(error);
 
@@ -242,90 +353,151 @@ export default function ProjectDashboard() {
 
   if (loading) {
     return (
-      <main>
-        <h1>Loading...</h1>
-      </main>
+      <AppShell>
+        <PageHeader title="Project Dashboard" />
+        <Spinner label="Loading" />
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Project Dashboard</h1>
-
-      {error && <p>{error}</p>}
-
-      {project && (
-        <section>
-          <h2>Project Information</h2>
-
-          <p>Name: {project.name}</p>
-
-          <p>Status: {project.status}</p>
-
-          <p>
-            Repository:{" "}
-            <a
-              href={project.repository_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {project.repository_url}
-            </a>
-          </p>
-
-          <button onClick={() => router.push(`/projects/${projectId}/edit`)}>
-            Edit Project
-          </button>
-        </section>
-      )}
-
-      <section>
-        <h2>Current Deployment</h2>
-
-        {deployment ? (
+    <AppShell>
+      <PageHeader
+        title="Project Dashboard"
+        subtitle={project ? `./${project.name.toLowerCase().replace(/\s+/g, "-")}` : undefined}
+        actions={
           <>
-            <p>Status: {deployment.status}</p>
-
-            <p>Image: {deployment.image_name || "N/A"}</p>
-
-            <p>Container: {deployment.container_id || "N/A"}</p>
-
-            <p>Port: {deployment.host_port || "N/A"}</p>
-
-            <button onClick={redeploy}>Redeploy</button>
-
-            {deployment.status === "RUNNING" && (
-              <button onClick={stopDeployment}>Stop</button>
-            )}
-
-            {deployment.status === "STOPPED" && (
-              <button onClick={startDeployment}>Start</button>
-            )}
+            <Button onClick={() => router.push(`/projects/${projectId}/deployments`)}>
+              Deployment History
+            </Button>
+            <Button onClick={() => router.push("/projects")}>All Projects</Button>
           </>
-        ) : (
-          <>
-            <p>No active deployment exists</p>
-
-            <button onClick={deploy}>Deploy</button>
-          </>
-        )}
-      </section>
-
-      <section>
-        <h2>Live Logs</h2>
-
-        <pre>{logs || "Waiting for deployment..."}</pre>
-      </section>
-
-      <button onClick={() => router.push(`/projects/${projectId}/deployments`)}>
-        Deployment History
-      </button>
-
-      <ConfirmDelete
-        title="Delete Project"
-        message="This will delete the project and all of its deployments."
-        onConfirm={deleteProject}
+        }
       />
-    </main>
+
+      {error && <Alert className="mb-8">{error}</Alert>}
+
+      <div className="flex flex-1 flex-col gap-8">
+        <div className="grid min-w-0 gap-8 lg:grid-cols-2">
+        {project && (
+          <Card className="min-w-0">
+            <CardHeader label="// PROJECT">
+              <CardTitle>Project Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="font-mono text-lg text-text-primary">{project.name}</p>
+                <div className="mt-3 space-y-1 font-mono text-xs text-text-secondary">
+                  <p>
+                    <span className="text-text-muted">├──</span> repository
+                  </p>
+                  <a
+                    href={project.repository_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate pl-4 text-text-muted hover:text-text-secondary transition-colors"
+                  >
+                    {project.repository_url}
+                  </a>
+                  <p>
+                    <span className="text-text-muted">├──</span> deployments
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-text-muted">└──</span> status{" "}
+                    <StatusBadge status={project.status} />
+                  </p>
+                </div>
+              </div>
+
+              <Button onClick={() => router.push(`/projects/${projectId}/edit`)}>
+                Edit Project
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="min-w-0">
+          <CardHeader label="// DEPLOYMENT">
+            <CardTitle>Current Deployment</CardTitle>
+          </CardHeader>
+          <CardContent className="min-w-0 space-y-4">
+            {deployment ? (
+              <>
+                <dl className="grid min-w-0 gap-4 font-mono text-sm">
+                  <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 border-b border-border-subtle pb-3">
+                    <dt className="text-text-muted">Status</dt>
+                    <dd className="flex min-w-0 justify-end">
+                      <StatusBadge status={deployment.status} className="max-w-full" />
+                    </dd>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-1">
+                    <dt className="shrink-0 text-text-muted">Image</dt>
+                    <dd className="min-w-0 break-all text-right text-text-secondary">
+                      {deployment.image_name || "N/A"}
+                    </dd>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-1">
+                    <dt className="shrink-0 text-text-muted">Container</dt>
+                    <dd className="min-w-0 break-all text-right text-text-secondary">
+                      {deployment.container_id || "N/A"}
+                    </dd>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-1">
+                    <dt className="shrink-0 text-text-muted">Port</dt>
+                    <dd className="min-w-0 text-right text-text-secondary">
+                      {deployment.host_port ?? "N/A"}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={redeploy}>
+                    Redeploy
+                  </Button>
+
+                  {deployment.status === "RUNNING" && (
+                    <Button onClick={stopDeployment}>Stop</Button>
+                  )}
+
+                  {deployment.status === "STOPPED" && (
+                    <Button onClick={startDeployment}>Start</Button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-xs text-text-muted">{"// NO ACTIVE DEPLOYMENT"}</p>
+                <p className="text-sm text-text-secondary">No active deployment exists</p>
+                <Button variant="primary" onClick={deploy}>
+                  {">"} DEPLOY
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+
+        <div className="flex min-h-[24rem] flex-1 flex-col">
+          <div className="mb-4">
+            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
+              {"// LIVE LOGS"}
+            </p>
+          </div>
+          <LogViewer
+            logs={logs}
+            placeholder="Waiting for deployment..."
+            className="min-h-[24rem] flex-1"
+          />
+        </div>
+
+        <div className="border-t border-border-subtle pt-8">
+        <ConfirmDelete
+          title="Delete Project"
+          message="This will delete the project and all of its deployments."
+          onConfirm={deleteProject}
+        />
+        </div>
+      </div>
+    </AppShell>
   );
 }

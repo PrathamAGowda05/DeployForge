@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import Spinner from "@/components/ui/Spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface User {
   id: number;
@@ -53,44 +59,68 @@ export default function ProfilePage() {
 
   if (authLoading || loading) {
     return (
-      <main>
-        <h1>Profile</h1>
-        <p>Loading...</p>
-      </main>
+      <AppShell>
+        <PageHeader index="02 — PROFILE" title="Profile" />
+        <Spinner label="Loading profile" />
+      </AppShell>
     );
   }
 
   if (!user) {
     return (
-      <main>
-        <h1>Profile</h1>
+      <AppShell>
+        <PageHeader index="02 — PROFILE" title="Profile" />
 
-        <p>{error || "Unable to load profile"}</p>
+        <Alert>{error || "Unable to load profile"}</Alert>
 
-        <button onClick={() => router.push("/projects")}>
+        <Button onClick={() => router.push("/projects")} className="mt-4">
           Back to Projects
-        </button>
-      </main>
+        </Button>
+      </AppShell>
     );
   }
 
   return (
-    <main>
-      <h1>Profile</h1>
+    <AppShell>
+      <PageHeader
+        index="02 — PROFILE"
+        title="Profile"
+        subtitle="Account information"
+        actions={
+          <>
+            <Button onClick={() => router.push("/projects")}>Projects</Button>
+            <Button variant="danger" onClick={logout}>
+              Logout
+            </Button>
+          </>
+        }
+      />
 
-      {error && <p>{error}</p>}
+      {error && (
+        <Alert className="mb-4">{error}</Alert>
+      )}
 
-      <section>
-        <h2>Account Information</h2>
-
-        <p>ID: {user.id}</p>
-
-        <p>Email: {user.email}</p>
-      </section>
-
-      <button onClick={() => router.push("/projects")}>Projects</button>
-
-      <button onClick={logout}>Logout</button>
-    </main>
+      <Card>
+        <CardHeader label="// ACCOUNT">
+          <CardTitle>Account Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                User ID
+              </p>
+              <p className="font-mono text-sm text-text-primary">{user.id}</p>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-text-muted">
+                Email
+              </p>
+              <p className="font-mono text-sm text-text-primary">{user.email}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </AppShell>
   );
 }
