@@ -8,6 +8,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Label from "@/components/ui/Label";
+import { cn } from "@/lib/utils";
 import Alert from "@/components/ui/Alert";
 import Spinner from "@/components/ui/Spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -18,6 +19,14 @@ interface Project {
   status: string;
   repository_url: string;
 }
+
+const PROJECT_STATUSES = ["ACTIVE", "INACTIVE", "ARCHIVED"] as const;
+
+const STATUS_SELECT_COLOR: Record<(typeof PROJECT_STATUSES)[number], string> = {
+  ACTIVE: "text-status-live",
+  INACTIVE: "text-status-building",
+  ARCHIVED: "text-text-muted",
+};
 
 export default function EditProjectPage() {
   const params = useParams();
@@ -128,13 +137,28 @@ export default function EditProjectPage() {
             <div className="space-y-2">
               <Label htmlFor="status">Project Status</Label>
 
-              <Input
+              <select
                 id="status"
-                type="text"
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
                 required
-              />
+                className={cn(
+                  "w-full appearance-none border border-border-subtle bg-bg-base bg-[length:0.75rem] bg-[position:right_0.875rem_center] bg-no-repeat py-2.5 pl-3.5 pr-10 text-base transition-colors duration-150",
+                  "hover:border-border-strong focus:border-border-strong focus:outline-none",
+                  STATUS_SELECT_COLOR[
+                    status as (typeof PROJECT_STATUSES)[number]
+                  ] ?? "text-text-primary",
+                )}
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                }}
+              >
+                {PROJECT_STATUSES.map((option) => (
+                  <option key={option} value={option} className="text-white">
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {error && <Alert>{error}</Alert>}

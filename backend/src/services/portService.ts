@@ -1,6 +1,6 @@
 import { pool } from "../db.js";
 
-const PORT_START = 3000;
+const PORT_START = 3001;
 const PORT_END = 3999;
 
 export const allocatePort = async (deploymentId: number) => {

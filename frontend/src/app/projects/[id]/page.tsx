@@ -33,16 +33,32 @@ interface Deployment {
 }
 
 const ACTIVE_STATUSES = ["PENDING", "BUILDING", "STARTING", "RUNNING"];
-const CURRENT_STATUSES = [...ACTIVE_STATUSES, "STOPPED"];
+const CURRENT_STATUSES = [...ACTIVE_STATUSES, "STOPPED", "FAILED"];
 const TRANSITIONAL_STATUSES = ["PENDING", "BUILDING", "STARTING"];
+const TERMINAL_STATUSES = ["FAILED", "RUNNING", "STOPPED"];
 
 function selectCurrentDeployment(deployments: Deployment[]): Deployment | null {
+  if (deployments.length === 0) {
+    return null;
+  }
+
   const sorted = [...deployments].sort((a, b) => b.id - a.id);
 
-  return (
-    sorted.find((deployment) => CURRENT_STATUSES.includes(deployment.status)) ??
-    null
+  const current = sorted.find((deployment) =>
+    CURRENT_STATUSES.includes(deployment.status),
   );
+
+  if (current) {
+    return current;
+  }
+
+  const latest = sorted[0];
+
+  if (TRANSITIONAL_STATUSES.includes(latest.status)) {
+    return latest;
+  }
+
+  return null;
 }
 
 function mergeDeploymentState(
@@ -53,8 +69,13 @@ function mergeDeploymentState(
     return next;
   }
 
+  const preserveStatus =
+    TERMINAL_STATUSES.includes(previous.status) &&
+    TRANSITIONAL_STATUSES.includes(next.status);
+
   return {
     ...next,
+    status: preserveStatus ? previous.status : next.status,
     image_name: next.image_name ?? previous.image_name,
     container_id: next.container_id ?? previous.container_id,
     host_port: next.host_port ?? previous.host_port,
@@ -216,39 +237,72 @@ export default function ProjectDashboard() {
 
       const deploymentId = response.data.deploymentId;
 
-      const refreshDeployment = async () => {
+      const fetchDeployment = async (previous: Deployment | null) => {
         const [projectResponse, deploymentResponse] = await Promise.all([
           api.get(`/api/projects/${projectId}`),
           api.get(`/api/projects/${projectId}/deployments/${deploymentId}`),
         ]);
 
-        setProject(projectResponse.data);
-        setDeployment(deploymentResponse.data);
+        const merged = mergeDeploymentState(
+          previous,
+          deploymentResponse.data as Deployment,
+        );
 
-        return deploymentResponse.data as Deployment;
+        setProject(projectResponse.data);
+        setDeployment(merged);
+
+        return merged;
       };
 
-      let currentDeployment = await refreshDeployment();
+      let currentDeployment = await fetchDeployment(null);
 
       connectLogs(deploymentId, true);
 
       const needsMetadata = (value: Deployment) =>
         !value.image_name || !value.container_id || value.host_port == null;
 
+      const isInProgress = (value: Deployment) =>
+        TRANSITIONAL_STATUSES.includes(value.status) ||
+        (value.status === "RUNNING" && needsMetadata(value));
+
       let attempts = 0;
 
-      while (
-        attempts < 15 &&
-        (TRANSITIONAL_STATUSES.includes(currentDeployment.status) ||
-          (currentDeployment.status === "RUNNING" &&
-            needsMetadata(currentDeployment)))
-      ) {
+      while (attempts < 15 && isInProgress(currentDeployment)) {
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        currentDeployment = await refreshDeployment();
+        currentDeployment = await fetchDeployment(currentDeployment);
+
+        if (currentDeployment.status === "FAILED") {
+          break;
+        }
+
         attempts++;
       }
     } catch (error: any) {
       console.error(error);
+
+      if (error.response?.status === 409) {
+        const existingDeploymentId = error.response?.data?.deploymentId;
+
+        if (existingDeploymentId) {
+          try {
+            const deploymentResponse = await api.get(
+              `/api/projects/${projectId}/deployments/${existingDeploymentId}`,
+            );
+
+            setDeployment(deploymentResponse.data);
+            connectLogs(existingDeploymentId, true);
+            setError(
+              "A deployment already exists for this project. Use Redeploy to try again.",
+            );
+            return;
+          } catch (loadError) {
+            console.error(loadError);
+          }
+        }
+
+        await fetchProjectData();
+        return;
+      }
 
       setError(error.response?.data?.error || "Deployment failed");
     }

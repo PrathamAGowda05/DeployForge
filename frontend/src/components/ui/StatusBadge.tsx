@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type StatusVariant = "live" | "building" | "failed" | "stopped" | "default";
+type StatusVariant = "live" | "building" | "failed" | "stopped" | "archived" | "default";
 
 function getStatusVariant(status: string): StatusVariant {
   const upper = status.toUpperCase();
@@ -9,7 +9,7 @@ function getStatusVariant(status: string): StatusVariant {
     return "live";
   }
 
-  if (["PENDING", "BUILDING", "STARTING"].includes(upper)) {
+  if (upper === "INACTIVE" || ["PENDING", "BUILDING", "STARTING"].includes(upper)) {
     return "building";
   }
 
@@ -17,7 +17,11 @@ function getStatusVariant(status: string): StatusVariant {
     return "failed";
   }
 
-  if (["STOPPED", "INACTIVE"].includes(upper)) {
+  if (upper === "ARCHIVED") {
+    return "archived";
+  }
+
+  if (["STOPPED"].includes(upper)) {
     return "stopped";
   }
 
@@ -40,6 +44,7 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
         variant === "building" && "border-status-building/30 text-status-building",
         variant === "failed" && "border-status-failed/30 text-status-failed",
         variant === "stopped" && "border-status-stopped/30 text-status-stopped",
+        variant === "archived" && "border-text-muted/30 text-text-muted",
         variant === "default" && "border-border-subtle text-text-secondary",
         className,
       )}
@@ -51,6 +56,7 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
           variant === "building" && "bg-status-building",
           variant === "failed" && "bg-status-failed",
           variant === "stopped" && "bg-status-stopped",
+          variant === "archived" && "bg-text-muted",
           variant === "default" && "bg-text-muted",
         )}
       />
