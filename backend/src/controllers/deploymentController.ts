@@ -362,6 +362,15 @@ export const stopDeployment = async (req: Request, res: Response) => {
       });
     }
 
+    emitDeploymentStatus(deployment.id, "STOPPING");
+
+    await pool.query(
+      `UPDATE deployments
+        SET status = $1
+        WHERE id = $2`,
+      ["STOPPING", deploymentId],
+    );
+
     await stopDockerContainer(deployment.container_id);
 
     const updatedDeployment = await pool.query(
@@ -371,6 +380,8 @@ export const stopDeployment = async (req: Request, res: Response) => {
        RETURNING *`,
       ["STOPPED", deploymentId],
     );
+
+    emitDeploymentStatus(deployment.id, "STOPPED");
 
     return res.json(updatedDeployment.rows[0]);
   } catch (error) {
@@ -412,8 +423,20 @@ export const startDeployment = async (req: Request, res: Response) => {
       });
     }
 
+    // 1. Emit STARTING status
+    emitDeploymentStatus(deployment.id, "STARTING");
+
+    await pool.query(
+      `UPDATE deployments
+       SET status = $1
+       WHERE id = $2`,
+      ["STARTING", deploymentId],
+    );
+
+    // 2. Start Docker container
     await startDockerContainer(deployment.container_id);
 
+    // 3. Update DB to RUNNING
     const updatedDeployment = await pool.query(
       `UPDATE deployments
        SET status = $1
@@ -421,6 +444,9 @@ export const startDeployment = async (req: Request, res: Response) => {
        RETURNING *`,
       ["RUNNING", deploymentId],
     );
+
+    // 4. Emit RUNNING status
+    emitDeploymentStatus(deployment.id, "RUNNING");
 
     return res.json(updatedDeployment.rows[0]);
   } catch (error) {
