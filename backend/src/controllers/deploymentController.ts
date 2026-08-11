@@ -577,19 +577,49 @@ export const getDeploymentLogs = async (req: Request, res: Response) => {
 export const streamDeploymentLogs = async (req: Request, res: Response) => {
   const { deploymentId } = req.params;
 
-  res.setHeader("Content-Type", "text/event-stream");
+  try {
+    // SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
 
-  res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache");
 
-  res.setHeader("Connection", "keep-alive");
+    res.setHeader("Connection", "keep-alive");
 
-  const listener = (log: string) => {
-    res.write(`data: ${log}\n\n`);
-  };
+    // 1. Fetch existing logs from database
+    const logsResult = await pool.query(
+      `SELECT logs
+       FROM deployments
+       WHERE id = $1`,
+      [deploymentId],
+    );
 
-  deploymentLogEmitter.on(String(deploymentId), listener);
+    if (logsResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Deployment not found",
+      });
+    }
 
-  req.on("close", () => {
-    deploymentLogEmitter.removeListener(String(deploymentId), listener);
-  });
+    const existingLogs = logsResult.rows[0].logs;
+
+    // 2. Send existing logs first
+    if (existingLogs) {
+      res.write(`data: ${existingLogs}\n\n`);
+    }
+
+    // 3. Listen for new log chunks
+    const listener = (log: string) => {
+      res.write(`data: ${log}\n\n`);
+    };
+
+    deploymentLogEmitter.on(String(deploymentId), listener);
+
+    // 4. Cleanup when client disconnects
+    req.on("close", () => {
+      deploymentLogEmitter.removeListener(String(deploymentId), listener);
+    });
+  } catch (error) {
+    console.error("SSE log stream error:", error);
+
+    res.end();
+  }
 };
