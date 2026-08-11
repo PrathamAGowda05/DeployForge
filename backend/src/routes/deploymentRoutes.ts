@@ -6,6 +6,7 @@ import {
   deleteDeployment,
   stopDeployment,
   startDeployment,
+  redeployDeployment,
 } from "../controllers/deploymentController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 

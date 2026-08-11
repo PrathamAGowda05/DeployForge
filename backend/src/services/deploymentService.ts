@@ -2,8 +2,14 @@ import path from "path";
 import fs from "fs/promises";
 
 import { cloneRepository } from "./gitService.js";
-import { buildDockerImage, runDockerContainer } from "./dockerService.js";
-import { allocatePort } from "./portService.js";
+import {
+  buildDockerImage,
+  runDockerContainer,
+  removeDockerContainer,
+  removeDockerImage,
+} from "./dockerService.js";
+
+import { allocatePort, releasePort } from "./portService.js";
 
 const workspaceRoot = path.resolve("workspace");
 
@@ -12,36 +18,71 @@ export const deployProject = async (
   projectId: number,
   deploymentId: number,
 ) => {
-  // Make sure the main workspace exists
   await fs.mkdir(workspaceRoot, { recursive: true });
 
-  // Unique folder for this deployment
   const repositoryPath = path.join(workspaceRoot, `deployment-${deploymentId}`);
 
-  // Generate a unique Docker image name
   const imageName = `deployforge-project-${projectId}-deployment-${deploymentId}`;
 
-  // 1. Clone repository
-  await cloneRepository(repositoryUrl, repositoryPath);
+  let hostPort: number | null = null;
+  let containerId: string | null = null;
 
-  // 2. Build Docker image
-  const buildResult = await buildDockerImage(repositoryPath, imageName);
+  try {
+    // 1. Clone repository
+    await cloneRepository(repositoryUrl, repositoryPath);
 
-  // 3. Run Docker container
-  const hostPort = await allocatePort(deploymentId);
-  const containerResult = await runDockerContainer(imageName, hostPort);
+    // 2. Build Docker image
+    const buildResult = await buildDockerImage(repositoryPath, imageName);
 
-  // 4. Cleanup cloned repository
-  await fs.rm(repositoryPath, {
-    recursive: true,
-    force: true,
-  });
+    // 3. Allocate port
+    hostPort = await allocatePort(deploymentId);
 
-  return {
-    repositoryPath,
-    imageName,
-    hostPort,
-    buildLogs: buildResult.logs,
-    containerId: containerResult.containerId,
-  };
+    // 4. Run Docker container
+    const containerResult = await runDockerContainer(imageName, hostPort);
+
+    containerId = containerResult.containerId;
+
+    return {
+      repositoryPath,
+      imageName,
+      hostPort,
+      buildLogs: buildResult.logs,
+      containerId,
+    };
+  } catch (error) {
+    console.error(`Deployment ${deploymentId} failed:`, error);
+
+    // Remove container if it was created
+    if (containerId) {
+      try {
+        await removeDockerContainer(containerId);
+      } catch (cleanupError) {
+        console.error("Failed to remove container:", cleanupError);
+      }
+    }
+
+    // Remove image if it was built
+    try {
+      await removeDockerImage(imageName);
+    } catch (cleanupError) {
+      console.error("Failed to remove image:", cleanupError);
+    }
+
+    // Release port if it was allocated
+    if (hostPort !== null) {
+      try {
+        await releasePort(deploymentId);
+      } catch (cleanupError) {
+        console.error("Failed to release port:", cleanupError);
+      }
+    }
+
+    throw error;
+  } finally {
+    // Always remove cloned repository
+    await fs.rm(repositoryPath, {
+      recursive: true,
+      force: true,
+    });
+  }
 };
